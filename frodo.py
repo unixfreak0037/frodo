@@ -95,6 +95,11 @@ parser.add_argument('--use-smbclient', action='store_true', dest='use_smbclient'
     help="Use the smbclient command for file transfers instead of cifs."
     + " Use this when the cifs mounts do not work.")
 
+parser.add_argument('--skip-space-check', action='store_true', 
+    dest='skip_space_check',
+    required=False, default=False,
+    help="Assume the client has enough space for a LR.")
+
 parser.add_argument('--skip-psexec', action='store_true', dest='skip_psexec',
     required=False, default=False,
     help="DEBUG OPTION: skip remote psexec")
@@ -237,29 +242,30 @@ while True:
     time.sleep(1)
 
 # check remote disk space
-smbclient = Popen([
-    'smbclient', 
-    '-A', temp_smbclient_authfile.name, 
-    '-c', 'du;',
-    '//{0}/{1}$'.format(args.remote_host, args.root_drive)], stdout=PIPE)
+if not self.skip_space_check:
+    smbclient = Popen([
+        'smbclient', 
+        '-A', temp_smbclient_authfile.name, 
+        '-c', 'du;',
+        '//{0}/{1}$'.format(args.remote_host, args.root_drive)], stdout=PIPE)
 
-(stdout, stderr) = smbclient.communicate()
-print stdout
-m = re.search(r'blocks of size (\d+)\. (\d+) ', stdout)
-if not m:
-    logging.error("unable to determine available disk space")
-    sys.exit(1)
+    (stdout, stderr) = smbclient.communicate()
+    print stdout
+    m = re.search(r'blocks of size (\d+)\. (\d+) ', stdout)
+    if not m:
+        logging.error("unable to determine available disk space")
+        sys.exit(1)
 
-block_size = int(m.group(1))
-blocks_available = int(m.group(2))
-disk_space = blocks_available * block_size
+    block_size = int(m.group(1))
+    blocks_available = int(m.group(2))
+    disk_space = blocks_available * block_size
 
-logging.info("available disk space: {0} bytes".format(disk_space))
+    logging.info("available disk space: {0} bytes".format(disk_space))
 
-# is there enough space?
-if disk_space < 1024 * 1024 * 1024 * 20: # 20 GB
-    logging.error("remote system has less than 20 GB left on device")
-    sys.exit(1)
+    # is there enough space?
+    if disk_space < 1024 * 1024 * 1024 * 20: # 20 GB
+        logging.error("remote system has less than 20 GB left on device")
+        sys.exit(1)
 
 # upload LR package to remote system
 logging.info("uploading LR scripts to {0} as {1}".format(
