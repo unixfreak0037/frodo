@@ -242,7 +242,7 @@ while True:
     time.sleep(1)
 
 # check remote disk space
-if not self.skip_space_check:
+if not args.skip_space_check:
     smbclient = Popen([
         'smbclient', 
         '-A', temp_smbclient_authfile.name, 
