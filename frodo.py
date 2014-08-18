@@ -390,7 +390,7 @@ if args.use_smbclient:
     smbclient = Popen([
         'smbclient',
         '-A', temp_smbclient_authfile.name,
-        '-c', 'recurse; prompt; lcd "{0}" cd \\lr\\win32\\output; mget *.7z; {1}'.format(
+        '-c', 'recurse; prompt; lcd "{0}"; cd \\lr\\win32\\output; mget *.7z; {1}'.format(
             lr_dest_dir, 'mget *.hpak;' if args.collect_memory else ''),
         '//{0}/{1}$'.format(args.remote_host, args.root_drive)])
     smbclient.wait()
