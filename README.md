@@ -1,7 +1,7 @@
 # FRODO - my little LR helper dude
 (with regards to remilliard)
 
-- watches for a host to come line
+- watches for a host to come online
 - uploads your LR stuff to the remote host (with smbclient or cifs mount)
 - remotely executes LR using impacket's psexec.py script
 - downloads the output of the LR to local directory
