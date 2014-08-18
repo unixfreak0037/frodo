@@ -11,7 +11,7 @@
 # to execute the mount command via sudo *without* a password prompt
 #
 
-from subprocess import Popen, PIPE
+from subprocess import Popen, PIPE, STDOUT
 import sys
 import os, os.path
 import atexit
@@ -36,7 +36,8 @@ except ImportError:
 
 # make sure we have the commands we expect
 for command in [ 'smbclient', 'mount.cifs', 'mailx' ]:
-    which = Popen(['which', command])
+    which = Popen(['which', command], 
+        stdout=open(os.devnull, 'wb'), stderr=STDOUT)
     which.wait()
     if which.returncode != 0:
         logging.fatal("missing command {0}".format(command))
