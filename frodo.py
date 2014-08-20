@@ -233,7 +233,7 @@ finally:
 # watch for the system to come online
 logging.info("waiting for host {0} to come online".format(args.remote_host))
 while True:
-    ping = Popen(['ping', '-c', '1', args.remote_host], stdout=PIPE)
+    ping = Popen(['ping', '-c', '1', args.remote_host], stdout=PIPE, stderr=PIPE)
     (stdout, stderr) = ping.communicate()
     if '1 packets transmitted, 1 received, 0% packet loss' in stdout:
         logging.info("host {0} is ONLINE".format(args.remote_host))
