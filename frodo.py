@@ -245,6 +245,7 @@ while True:
 if not args.skip_space_check:
     smbclient = Popen([
         'smbclient', 
+        '--socket-options=TCP_NODELAY IPTOS_LOWDELAY SO_KEEPALIVE SO_RCVBUF=131072 SO_SNDBUF=131072',
         '-A', temp_smbclient_authfile.name, 
         '-c', 'du;',
         '//{0}/{1}$'.format(args.remote_host, args.root_drive)], stdout=PIPE)
@@ -275,6 +276,7 @@ if args.use_smbclient:
     # make sure we can create the lr directory on the remote machine
     smbclient = Popen([
         'smbclient',
+        '--socket-options=TCP_NODELAY IPTOS_LOWDELAY SO_KEEPALIVE SO_RCVBUF=131072 SO_SNDBUF=131072',
         '-A', temp_smbclient_authfile.name,
         '-c', 'prompt; mkdir \\lr; dir',
         '//{0}/{1}$'.format(args.remote_host, args.root_drive)],
@@ -289,6 +291,7 @@ if args.use_smbclient:
     # copy all the files
     smbclient = Popen([
         'smbclient',
+        '--socket-options=TCP_NODELAY IPTOS_LOWDELAY SO_KEEPALIVE SO_RCVBUF=131072 SO_SNDBUF=131072',
         '-A', temp_smbclient_authfile.name,
         '-c', 'recurse; prompt; cd \\lr; mput {0}'.format(args.lr_prod_dir),
         '//{0}/{1}$'.format(args.remote_host, args.root_drive)])
@@ -395,6 +398,7 @@ except Exception,e:
 if args.use_smbclient:
     smbclient = Popen([
         'smbclient',
+        '--socket-options=TCP_NODELAY IPTOS_LOWDELAY SO_KEEPALIVE SO_RCVBUF=131072 SO_SNDBUF=131072',
         '-A', temp_smbclient_authfile.name,
         '-c', 'recurse; prompt; lcd "{0}"; cd \\lr\\win32\\output; mget *.7z; {1}'.format(
             lr_dest_dir, 'mget *.hpak;' if args.collect_memory else ''),
