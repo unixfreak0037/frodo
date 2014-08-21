@@ -95,6 +95,11 @@ parser.add_argument('--use-smbclient', action='store_true', dest='use_smbclient'
     help="Use the smbclient command for file transfers instead of cifs."
     + " Use this when the cifs mounts do not work.")
 
+parser.add_argument('--use-smbget', action='store_true', dest='use_smbget',
+    required=False, default=False,
+    help="Use the smbget command for file downloads."
+    + " This supports resume, but THE PASSWORD IS IN CLEAR TEXT IN THE COMMAND LINE.")
+
 parser.add_argument('--skip-space-check', action='store_true', 
     dest='skip_space_check',
     required=False, default=False,
@@ -395,7 +400,31 @@ except Exception,e:
     logging.error("unable to create dir {0}: {1}".format(lr_dest_dir, str(e)))
     sys.exit(1)
 
-if args.use_smbclient:
+if args.use_smbget:
+    while True:
+        logging.info("attempting download using smbget")
+        smbget = Popen([
+            'smbget',
+            '-r',
+            '-R',
+            '-n',
+            '-q',
+            'smb://{domain};{user}:{password}@{server}/{root_drive}$/lr/win32/output'.format(
+                domain=args.domain,
+                user=args.user_name,
+                password=password,
+                server=args.remote_host,
+                root_drive=args.root_drive)])
+
+        (stdout, stdout) = smbget.communicate()
+        if smbget.returncode != 0:
+            logging.error("smbget failed")
+            continue
+
+        # got it, move on
+        break
+
+elif args.use_smbclient:
     smbclient = Popen([
         'smbclient',
         '--socket-options=TCP_NODELAY IPTOS_LOWDELAY SO_KEEPALIVE SO_RCVBUF=131072 SO_SNDBUF=131072',
