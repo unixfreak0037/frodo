@@ -11,6 +11,9 @@
 # to execute the mount command via sudo *without* a password prompt
 #
 
+# TODO 
+# 1) make sure remote host name matches requested host name
+
 from subprocess import Popen, PIPE, STDOUT
 import sys
 import os, os.path
@@ -33,15 +36,6 @@ except ImportError:
     logging.fatal("missing impacket library " +
 "(see http://corelabs.coresecurity.com/index.php?module=Wiki&action=view&type=tool&name=Impacket")
     sys.exit(1)
-
-# make sure we have the commands we expect
-for command in [ 'smbclient', 'mount.cifs', 'mailx' ]:
-    which = Popen(['which', command], 
-        stdout=open(os.devnull, 'wb'), stderr=STDOUT)
-    which.wait()
-    if which.returncode != 0:
-        logging.fatal("missing command {0}".format(command))
-        sys.exit(1)
 
 from psexec import PSEXEC # from the impacket libs
 
@@ -100,6 +94,9 @@ parser.add_argument('--use-smbget', action='store_true', dest='use_smbget',
     help="Use the smbget command for file downloads."
     + " This supports resume, but THE PASSWORD IS IN CLEAR TEXT IN THE COMMAND LINE.")
 
+parser.add_argument('--max-attempts', action='store', type=int, required=False, default=25, dest='max_attempts',
+    help="Maximum number of times to retry or resume an LR download.")
+
 parser.add_argument('--skip-space-check', action='store_true', 
     dest='skip_space_check',
     required=False, default=False,
@@ -110,7 +107,7 @@ parser.add_argument('--skip-psexec', action='store_true', dest='skip_psexec',
     help="DEBUG OPTION: skip remote psexec")
 
 parser.add_argument('--lr-prod-dir', action='store', dest='lr_prod_dir',
-    required=False, default='win32',
+    required=False, default='win32/',
     help="Directory that contains LR tools (starting with win32).")
 
 parser.add_argument('--lr-stage-dir', action='store', dest='lr_stage_dir',
@@ -144,6 +141,23 @@ if not os.path.exists(args.lr_prod_dir):
     logging.error("missing production LR directory: {0}".format(
         args.lr_prod_dir))
     sys.exit(1)
+
+# make sure we have the commands we expect
+commands = [ 'mailx' ]
+if not args.use_smbclient and not args.use_smbget:
+    commands.append('mount.cifs')
+if args.use_smbclient:
+    commands.append('smbclient')
+if args.use_smbget:
+    commands.append('smbget')
+
+for command in commands:
+    which = Popen(['which', command], 
+        stdout=open(os.devnull, 'wb'), stderr=STDOUT)
+    which.wait()
+    if which.returncode != 0:
+        logging.fatal("missing command {0}".format(command))
+        sys.exit(1)
 
 # if we're *not* using smbclient then the mount command should be
 # executable via sudo without a password
@@ -293,12 +307,26 @@ if args.use_smbclient:
         logging.error("unable to create lr directory on remote machine")
         sys.exit(1)
 
+    smbclient = Popen([
+        'smbclient',
+        '--socket-options=TCP_NODELAY IPTOS_LOWDELAY SO_KEEPALIVE SO_RCVBUF=131072 SO_SNDBUF=131072',
+        '-A', temp_smbclient_authfile.name,
+        '-c', 'prompt; cd \\lr; mkdir win32; dir',
+        '//{0}/{1}$'.format(args.remote_host, args.root_drive)],
+        stdout=PIPE)
+
+    (stdout, stderr) = smbclient.communicate()
+
+    if not re.search(r'\s+win32\s+D\s+0\s+... ... .. ........ ....', stdout):
+        logging.error("unable to create lr\\win32 directory on remote machine")
+        sys.exit(1)
+
     # copy all the files
     smbclient = Popen([
         'smbclient',
         '--socket-options=TCP_NODELAY IPTOS_LOWDELAY SO_KEEPALIVE SO_RCVBUF=131072 SO_SNDBUF=131072',
         '-A', temp_smbclient_authfile.name,
-        '-c', 'recurse; prompt; cd \\lr; mput {0}'.format(args.lr_prod_dir),
+        '-c', 'recurse; prompt; cd \\lr\\win32; lcd {0}; mput *'.format(args.lr_prod_dir),
         '//{0}/{1}$'.format(args.remote_host, args.root_drive)])
     smbclient.wait()
 
@@ -401,24 +429,30 @@ except Exception,e:
     sys.exit(1)
 
 if args.use_smbget:
+    attempts = 1
     while True:
-        logging.info("attempting download using smbget")
+        logging.info("attempting download using smbget (attempt #{0})".format(attempts))
         smbget = Popen([
             'smbget',
             '-r',
             '-R',
             '-n',
-            '-q',
+            #'-q',
             'smb://{domain};{user}:{password}@{server}/{root_drive}$/lr/win32/output'.format(
                 domain=args.domain,
                 user=args.user_name,
                 password=password,
                 server=args.remote_host,
-                root_drive=args.root_drive)])
+                root_drive=args.root_drive)],
+            cwd=lr_dest_dir)
 
         (stdout, stdout) = smbget.communicate()
         if smbget.returncode != 0:
             logging.error("smbget failed")
+            attempts += 1
+            if attempts > args.max_attempts:
+                logging.fatal("maximum download attempts exceeded -- bailing")
+                sys.exit(1)
             continue
 
         # got it, move on
@@ -429,14 +463,29 @@ elif args.use_smbclient:
         'smbclient',
         '--socket-options=TCP_NODELAY IPTOS_LOWDELAY SO_KEEPALIVE SO_RCVBUF=131072 SO_SNDBUF=131072',
         '-A', temp_smbclient_authfile.name,
-        '-c', 'recurse; prompt; lcd "{0}"; cd \\lr\\win32\\output; mget *.7z; {1}'.format(
-            lr_dest_dir, 'mget *.hpak;' if args.collect_memory else ''),
+        '-c', 'recurse; prompt; lcd "{0}"; cd \\lr\\win32\\output; mget *.7z'.format(
+            lr_dest_dir),
         '//{0}/{1}$'.format(args.remote_host, args.root_drive)])
     smbclient.wait()
 
     if smbclient.returncode != 0:
         logging.error("smbclient failed")
         sys.exit(1)
+
+    if args.collect_memory:
+        logging.debug("downloading hpak files")
+        smbclient = Popen([
+            'smbclient',
+            '--socket-options=TCP_NODELAY IPTOS_LOWDELAY SO_KEEPALIVE SO_RCVBUF=131072 SO_SNDBUF=131072',
+            '-A', temp_smbclient_authfile.name,
+            '-c', 'recurse; prompt; lcd "{0}"; cd \\lr\\win32\\output; mget *.hpak'.format(
+                lr_dest_dir, 'mget *.hpak;' if args.collect_memory else ''),
+            '//{0}/{1}$'.format(args.remote_host, args.root_drive)])
+        smbclient.wait()
+
+        if smbclient.returncode != 0:
+            logging.error("smbclient failed")
+            sys.exit(1)
 else:
     # and then... COPY-PASTA  YAY!
 
@@ -522,4 +571,3 @@ ssh.wait()
 if ssh.returncode != 0:
     logging.error("unable to process results on analysis server")
     sys.exit(1)
-
