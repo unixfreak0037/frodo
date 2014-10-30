@@ -437,7 +437,7 @@ if args.use_smbget:
             '-r',
             '-R',
             '-n',
-            #'-q',
+            '-q',
             'smb://{domain};{user}:{password}@{server}/{root_drive}$/lr/win32/output'.format(
                 domain=args.domain,
                 user=args.user_name,
